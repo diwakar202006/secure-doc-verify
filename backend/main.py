@@ -1,18 +1,46 @@
+import os
+import shutil
 from fastapi import FastAPI, UploadFile, File, Depends
 from sqlalchemy.orm import Session
-import shutil
-import os
 
-from database import SessionLocal, engine
-import models
-from ml import predict_image
+# 🔥 DEBUG STARTUP INFO
+print("🚀 STARTING APP...")
+print("📁 Current directory:", os.getcwd())
+print("📦 Files in directory:", os.listdir())
+print("🌐 DATABASE_URL:", os.getenv("DATABASE_URL"))
 
-# Create DB tables
-models.Base.metadata.create_all(bind=engine)
+# 🔥 SAFE IMPORTS
+try:
+    from database import SessionLocal, engine
+    print("✅ Database module loaded")
+except Exception as e:
+    print("❌ Database import error:", str(e))
+
+try:
+    import models
+    print("✅ Models loaded")
+except Exception as e:
+    print("❌ Models import error:", str(e))
+
+try:
+    from ml import predict_image
+    print("✅ ML module loaded")
+except Exception as e:
+    print("❌ ML import error:", str(e))
+
+# 🔥 CREATE TABLES SAFELY
+try:
+    models.Base.metadata.create_all(bind=engine)
+    print("✅ Tables created")
+except Exception as e:
+    print("❌ DB table creation error:", str(e))
+
 
 app = FastAPI()
 
-UPLOAD_FOLDER = "uploads"
+# ✅ FIX UPLOAD PATH (important for Render)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
@@ -33,7 +61,7 @@ def home():
 # Upload document
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    file_path = f"{UPLOAD_FOLDER}/{file.filename}"
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -58,11 +86,17 @@ def verify(doc_id: int, db: Session = Depends(get_db)):
     if not doc:
         return {"error": "Document not found"}
 
-    result = predict_image(doc.file_path)
+    print("📂 Verifying file:", doc.file_path)
 
-    doc.result = result["result"]
-    doc.confidence = result["confidence"]
-    doc.status = "accepted" if result["result"] == "real" else "rejected"
+    try:
+        result = predict_image(doc.file_path)
+    except Exception as e:
+        print("❌ ML runtime error:", str(e))
+        return {"error": str(e)}
+
+    doc.result = result.get("result")
+    doc.confidence = result.get("confidence")
+    doc.status = "accepted" if result.get("result") == "real" else "rejected"
 
     db.commit()
 
