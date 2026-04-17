@@ -1,19 +1,24 @@
 import tensorflow as tf
 
-# Load your model
-model = tf.keras.models.load_model("model.h5")
+# Load model WITHOUT compiling (IMPORTANT FIX)
+model = tf.keras.models.load_model("model.h5", compile=False)
 
-# Convert to TensorFlow Lite
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
+# Create concrete function (NEW SAFE METHOD)
+run_model = tf.function(lambda x: model(x))
+concrete_func = run_model.get_concrete_function(
+    tf.TensorSpec([1, 224, 224, 3], tf.float32)
+)
 
-# (Optional but IMPORTANT) Optimization
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
+# Convert to TFLite
+converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 
-# Convert model
+# 🔥 Compatibility fix
+converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
+
 tflite_model = converter.convert()
 
-# Save compressed model
+# Save model
 with open("model.tflite", "wb") as f:
     f.write(tflite_model)
 
-print("✅ Model converted to TFLite successfully!")
+print("✅ FINAL TFLite model created successfully!")
